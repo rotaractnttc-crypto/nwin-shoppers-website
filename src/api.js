@@ -10,6 +10,10 @@ export function setAuthChangeListener(fn) {
   onAuthChange = fn;
 }
 
+export function getAccessToken() {
+  return accessToken;
+}
+
 function setAccessToken(token) {
   accessToken = token;
 }
@@ -184,5 +188,77 @@ export const api = {
   },
   removeWishlist(productId) {
     return request(`/wishlist/${productId}`, { method: "DELETE" });
+  },
+
+  // ---------- restaurants (food delivery) ----------
+  listRestaurants() {
+    return request("/restaurants").then((d) => d.restaurants);
+  },
+  getRestaurant(id) {
+    return request(`/restaurants/${id}`);
+  },
+  adminCreateRestaurant(payload) {
+    return request("/restaurants", { method: "POST", body: payload }).then((d) => d.restaurant);
+  },
+  applyRestaurant(payload) {
+    return request("/restaurants/apply", { method: "POST", body: payload }).then((d) => d.restaurant);
+  },
+  myRestaurant() {
+    return request("/restaurants/mine/status").then((d) => d.restaurant);
+  },
+  updateRestaurant(id, payload) {
+    return request(`/restaurants/${id}`, { method: "PATCH", body: payload }).then((d) => d.restaurant);
+  },
+  adminPendingRestaurants() {
+    return request("/restaurants/admin/pending").then((d) => d.restaurants);
+  },
+  adminSetRestaurantStatus(id, status) {
+    return request(`/restaurants/admin/${id}/status`, { method: "PATCH", body: { status } }).then((d) => d.restaurant);
+  },
+
+  // ---------- menu items ----------
+  createMenuItem(payload) {
+    return request("/menu-items", { method: "POST", body: payload }).then((d) => d.menuItem);
+  },
+  updateMenuItem(id, payload) {
+    return request(`/menu-items/${id}`, { method: "PUT", body: payload }).then((d) => d.menuItem);
+  },
+  myMenu(restaurantId) {
+    return request(`/menu-items/mine/${restaurantId}`).then((d) => d.menuItems);
+  },
+  adminPendingMenuItems() {
+    return request("/menu-items/admin/pending").then((d) => d.menuItems);
+  },
+  adminSetMenuItemStatus(id, status) {
+    return request(`/menu-items/admin/${id}/status`, { method: "PATCH", body: { status } }).then((d) => d.menuItem);
+  },
+
+  // ---------- food orders ----------
+  placeFoodOrder(payload) {
+    return request("/food-orders", { method: "POST", body: payload });
+  },
+  myFoodOrders() {
+    return request("/food-orders").then((d) => d.orders);
+  },
+  getFoodOrder(id) {
+    return request(`/food-orders/${id}`);
+  },
+  availableFoodOrders() {
+    return request("/food-orders/available").then((d) => d.orders);
+  },
+  myClaimedOrders() {
+    return request("/food-orders/mine/claimed").then((d) => d.orders);
+  },
+  restaurantOrders(restaurantId) {
+    return request(`/food-orders/restaurant/${restaurantId}`).then((d) => d.orders);
+  },
+  updateFoodOrderStatus(id, status) {
+    return request(`/food-orders/${id}/status`, { method: "PATCH", body: { status } }).then((d) => d.order);
+  },
+  claimFoodOrder(id) {
+    return request(`/food-orders/${id}/claim`, { method: "POST" }).then((d) => d.order);
+  },
+  riderUpdateStatus(id, status) {
+    return request(`/food-orders/${id}/rider-status`, { method: "PATCH", body: { status } }).then((d) => d.order);
   },
 };

@@ -7,6 +7,11 @@ import {
   Instagram, Twitter, Users,
 } from "lucide-react";
 import { api, setAuthChangeListener } from "./api";
+import { disconnectSocket } from "./socket";
+import {
+  FoodHome, RestaurantPage, FoodCartPage, FoodCheckoutPage, FoodTrackingPage,
+  RestaurantDashboard, RiderDashboard,
+} from "./Food";
 
 /* ---------------------------------------------------------------
    NWIN SHOPPERS — buyer website
@@ -123,6 +128,7 @@ function Header({ user, cartCount, wishlistCount, query, setQuery, onNav, onLogo
         <nav className="header-nav">
           <button onClick={() => onNav("categories")}>Categories</button>
           <button onClick={() => onNav("home", { deal: true })}>Deals</button>
+          <button onClick={() => onNav("food-home")} style={{ color: "#E2542D" }}>🍔 Food</button>
           <button onClick={() => onNav("sell")}>Sell on Nwin</button>
         </nav>
 
@@ -144,7 +150,10 @@ function Header({ user, cartCount, wishlistCount, query, setQuery, onNav, onLogo
                   <button onClick={() => { onNav("orders"); setMenuOpen(false); }}>My orders</button>
                   {user.role === "seller" && <button onClick={() => { onNav("seller-home"); setMenuOpen(false); }}><Store size={13} /> Seller dashboard</button>}
                   {user.role === "admin" && <button onClick={() => { onNav("admin-home"); setMenuOpen(false); }}><ShieldCheck size={13} /> Admin console</button>}
+                  {user.role === "rider" && <button onClick={() => { onNav("rider-dashboard"); setMenuOpen(false); }}>🏍️ Rider dashboard</button>}
                   {user.role === "shopper" && <button onClick={() => { onNav("sell"); setMenuOpen(false); }}>Sell on Nwin</button>}
+                  <button onClick={() => { onNav("restaurant-dashboard"); setMenuOpen(false); }}>🍔 Restaurant dashboard</button>
+                  <button onClick={() => { onNav("food-cart"); setMenuOpen(false); }}>Food cart</button>
                   <button onClick={() => { onLogout(); setMenuOpen(false); }}><LogOut size={13} /> Log out</button>
                 </div>
               )}
@@ -895,7 +904,13 @@ function SellerAddProductForm({ onSubmit, busy }) {
 
 /* ---------------- ADMIN CONSOLE ---------------- */
 
-function AdminConsole({ pendingSellers, pendingProducts, stats, onApproveSeller, onApproveProduct }) {
+function AdminConsole({
+  pendingSellers, pendingProducts, stats, onApproveSeller, onApproveProduct,
+  pendingRestaurants, pendingMenuItems, onApproveRestaurant, onApproveMenuItem,
+  onAddRestaurantDirect, addRestaurantBusy,
+}) {
+  const [showAddRestaurant, setShowAddRestaurant] = useState(false);
+
   return (
     <div className="container" style={{ paddingBottom: 40 }}>
       <div style={{ paddingTop: 20 }}>
@@ -907,6 +922,8 @@ function AdminConsole({ pendingSellers, pendingProducts, stats, onApproveSeller,
         <div className="stat-tile"><Store size={18} color="#1B5E3A" /><div className="stat-n">{stats?.liveProducts ?? "–"}</div><div className="stat-l">Products</div></div>
         <div className="stat-tile"><Truck size={18} color="#E2542D" /><div className="stat-n">{stats?.totalOrders ?? "–"}</div><div className="stat-l">Orders</div></div>
         <div className="stat-tile"><Gift size={18} color="#C9962A" /><div className="stat-n">{money(stats?.paidRevenue || 0)}</div><div className="stat-l">Paid revenue</div></div>
+        <div className="stat-tile"><span style={{ fontSize: 18 }}>🍔</span><div className="stat-n">{stats?.approvedRestaurants ?? "–"}</div><div className="stat-l">Restaurants</div></div>
+        <div className="stat-tile"><span style={{ fontSize: 18 }}>🛵</span><div className="stat-n">{stats?.totalFoodOrders ?? "–"}</div><div className="stat-l">Food orders</div></div>
       </div>
 
       <div className="section-head">Pending seller approval ({pendingSellers.length})</div>
@@ -939,6 +956,57 @@ function AdminConsole({ pendingSellers, pendingProducts, stats, onApproveSeller,
           </div>
         ))}
       </div>
+
+      <div className="section-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>🍔 Restaurants — pending ({pendingRestaurants.length})</span>
+        <button className="mini-btn" onClick={() => setShowAddRestaurant((v) => !v)}>{showAddRestaurant ? "Cancel" : "+ Add restaurant directly"}</button>
+      </div>
+      {showAddRestaurant && <AdminAddRestaurantForm onSubmit={onAddRestaurantDirect} busy={addRestaurantBusy} />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {!pendingRestaurants.length && <div className="empty">All caught up</div>}
+        {pendingRestaurants.map((r) => (
+          <div key={r.id} className="cart-row">
+            <div className="cart-thumb">🍔</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{r.name}</div>
+              <div style={{ fontSize: 12, color: "#8A8578" }}>{r.applicant_name} · {r.email} · {r.cuisine_type}</div>
+            </div>
+            <button className="mini-btn approve" onClick={() => onApproveRestaurant(r.id)}>Approve</button>
+          </div>
+        ))}
+      </div>
+
+      <div className="section-head">🍲 Menu items — pending ({pendingMenuItems.length})</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {!pendingMenuItems.length && <div className="empty">All caught up</div>}
+        {pendingMenuItems.map((m) => (
+          <div key={m.id} className="cart-row">
+            <div className="cart-thumb">🍲</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{m.name}</div>
+              <div style={{ fontSize: 12, color: "#8A8578" }}>{m.restaurant_name}</div>
+              <PriceTag price={m.price} />
+            </div>
+            <button className="mini-btn approve" onClick={() => onApproveMenuItem(m.id)}>Approve</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminAddRestaurantForm({ onSubmit, busy }) {
+  const [form, setForm] = useState({ name: "", cuisine_type: "", location: "", phone: "", avg_prep_minutes: "20", description: "" });
+  return (
+    <div className="cart-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, padding: 16 }}>
+      <input className="text-input" style={{ marginTop: 0 }} placeholder="Restaurant name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      <input className="text-input" placeholder="Cuisine type" value={form.cuisine_type} onChange={(e) => setForm({ ...form, cuisine_type: e.target.value })} />
+      <input className="text-input" placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+      <input className="text-input" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+      <input className="text-input" type="number" placeholder="Avg prep minutes" value={form.avg_prep_minutes} onChange={(e) => setForm({ ...form, avg_prep_minutes: e.target.value })} />
+      <button className="btn-primary" disabled={!form.name || busy} onClick={() => onSubmit({ ...form, avg_prep_minutes: Number(form.avg_prep_minutes) || 20 })}>
+        {busy ? "Adding..." : "Add restaurant (goes live immediately)"}
+      </button>
     </div>
   );
 }
@@ -979,6 +1047,17 @@ export default function App() {
   const [addBusy, setAddBusy] = useState(false);
   const [pendingVerifyEmail, setPendingVerifyEmail] = useState(null);
   const [showAppBanner, setShowAppBanner] = useState(false);
+
+  const [restaurants, setRestaurants] = useState([]);
+  const [myRestaurant, setMyRestaurant] = useState(null);
+  const [pendingRestaurants, setPendingRestaurants] = useState([]);
+  const [pendingMenuItems, setPendingMenuItems] = useState([]);
+  const [foodCart, setFoodCart] = useState([]);
+  const [activeRestaurantId, setActiveRestaurantId] = useState(null);
+  const [activeFoodOrderId, setActiveFoodOrderId] = useState(null);
+  const [restaurantApplyBusy, setRestaurantApplyBusy] = useState(false);
+  const [addRestaurantBusy, setAddRestaurantBusy] = useState(false);
+  const [foodOrderBusy, setFoodOrderBusy] = useState(false);
 
   const [page, setPage] = useState("home");
   const [filterDeal, setFilterDeal] = useState(false);
@@ -1023,6 +1102,17 @@ export default function App() {
     api.adminPendingSellers().then(setPendingSellers).catch(() => {});
     api.adminPendingProducts().then(setPendingProducts).catch(() => {});
     api.adminStats().then(setAdminStats).catch(() => {});
+    api.adminPendingRestaurants().then(setPendingRestaurants).catch(() => {});
+    api.adminPendingMenuItems().then(setPendingMenuItems).catch(() => {});
+  }, [user, page]);
+
+  useEffect(() => {
+    api.listRestaurants().then(setRestaurants).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!user) { setMyRestaurant(null); return; }
+    api.myRestaurant().then(setMyRestaurant).catch(() => setMyRestaurant(null));
   }, [user, page]);
 
   // Smart app banner: only on small screens, only once per session, and
@@ -1171,6 +1261,66 @@ export default function App() {
     } catch (e) { flash(e.message); }
   };
 
+  const openRestaurant = (r) => { setActiveRestaurantId(r.id); nav("restaurant"); };
+
+  const placeFoodOrder = async ({ address, phone, payment }) => {
+    if (!user) { flash("Log in to place an order"); nav("auth"); return; }
+    if (!requireVerified()) { flash("Please verify your email before checking out"); return; }
+    if (!foodCart.length) return;
+    setFoodOrderBusy(true);
+    try {
+      const { order } = await api.placeFoodOrder({
+        restaurant_id: foodCart[0].restaurant_id,
+        items: foodCart.map((i) => ({ menu_item_id: i.menu_item_id, quantity: i.quantity })),
+        payment_method: payment, delivery_address: address, delivery_phone: phone,
+      });
+      setFoodCart([]);
+      setActiveFoodOrderId(order.id);
+      flash("Food order placed!");
+      nav("food-tracking");
+    } catch (e) {
+      flash(e.message);
+    } finally {
+      setFoodOrderBusy(false);
+    }
+  };
+
+  const applyRestaurant = async (form) => {
+    if (!requireVerified()) { flash("Please verify your email before applying"); return; }
+    setRestaurantApplyBusy(true);
+    try {
+      const r = await api.applyRestaurant(form);
+      setMyRestaurant(r);
+      flash("Restaurant application submitted for review");
+    } catch (e) { flash(e.message); } finally { setRestaurantApplyBusy(false); }
+  };
+
+  const addRestaurantDirect = async (form) => {
+    setAddRestaurantBusy(true);
+    try {
+      const r = await api.adminCreateRestaurant(form);
+      setRestaurants((rs) => [r, ...rs]);
+      flash(`${r.name} added and live`);
+    } catch (e) { flash(e.message); } finally { setAddRestaurantBusy(false); }
+  };
+
+  const approveRestaurant = async (id) => {
+    try {
+      await api.adminSetRestaurantStatus(id, "approved");
+      setPendingRestaurants((rs) => rs.filter((x) => x.id !== id));
+      api.listRestaurants().then(setRestaurants);
+      flash("Restaurant approved");
+    } catch (e) { flash(e.message); }
+  };
+
+  const approveMenuItem = async (id) => {
+    try {
+      await api.adminSetMenuItemStatus(id, "approved");
+      setPendingMenuItems((ms) => ms.filter((x) => x.id !== id));
+      flash("Menu item approved");
+    } catch (e) { flash(e.message); }
+  };
+
   const doRegister = async (payload) => {
     const data = await api.register(payload);
     setPendingVerifyEmail(data.user.email);
@@ -1180,6 +1330,11 @@ export default function App() {
   const doGoogle = async (idToken) => {
     await api.googleSignIn(idToken);
     nav("home");
+  };
+
+  const doLogout = async () => {
+    disconnectSocket();
+    await api.logout();
   };
 
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
@@ -1203,9 +1358,16 @@ export default function App() {
     const tab = page === "seller-add" ? "add" : page === "seller-orders" ? "orders" : "overview";
     body = <SellerDashboard seller={seller} myProducts={myProducts} myOrders={myOrders} tab={tab} onNav={nav} flash={flash} onAddProduct={addSellerProduct} onUpdateOrderStatus={updateOrderStatus} addBusy={addBusy} />;
   }
-  else if (page === "admin-home") body = <AdminConsole pendingSellers={pendingSellers} pendingProducts={pendingProducts} stats={adminStats} onApproveSeller={approveSeller} onApproveProduct={approveProduct} />;
+  else if (page === "admin-home") body = <AdminConsole pendingSellers={pendingSellers} pendingProducts={pendingProducts} stats={adminStats} onApproveSeller={approveSeller} onApproveProduct={approveProduct} pendingRestaurants={pendingRestaurants} pendingMenuItems={pendingMenuItems} onApproveRestaurant={approveRestaurant} onApproveMenuItem={approveMenuItem} onAddRestaurantDirect={addRestaurantDirect} addRestaurantBusy={addRestaurantBusy} />;
   else if (page === "verify-otp") body = <OtpPage email={pendingVerifyEmail || user?.email} flash={flash} onVerified={async () => { const me = await api.fetchMe(); setUser(me); nav("home"); }} />;
   else if (page === "auth") body = user ? <OrdersPage user={user} orders={orders} onTrack={(o) => { setActiveOrder(o); nav("tracking"); }} points={user.points || 0} /> : <AuthPage onLogin={api.login} onRegister={doRegister} onGoogle={doGoogle} flash={flash} />;
+  else if (page === "food-home") body = <FoodHome restaurants={restaurants} onOpen={openRestaurant} />;
+  else if (page === "restaurant") body = <RestaurantPage restaurantId={activeRestaurantId} onBack={() => nav("food-home")} foodCart={foodCart} setFoodCart={setFoodCart} flash={flash} />;
+  else if (page === "food-cart") body = <FoodCartPage foodCart={foodCart} setFoodCart={setFoodCart} onCheckout={() => user ? nav("food-checkout") : (flash("Log in to checkout"), nav("auth"))} />;
+  else if (page === "food-checkout") body = <FoodCheckoutPage foodCart={foodCart} onPlace={placeFoodOrder} busy={foodOrderBusy} />;
+  else if (page === "food-tracking") body = <FoodTrackingPage orderId={activeFoodOrderId} flash={flash} />;
+  else if (page === "restaurant-dashboard") body = <RestaurantDashboard restaurant={myRestaurant} onApply={applyRestaurant} applyBusy={restaurantApplyBusy} flash={flash} />;
+  else if (page === "rider-dashboard") body = user?.role === "rider" ? <RiderDashboard flash={flash} /> : <div className="container" style={{ padding: 40 }}>Rider access only.</div>;
 
   return (
     <div className="site">
@@ -1221,7 +1383,7 @@ export default function App() {
       <Header
         user={user} cartCount={cartCount} wishlistCount={wishlist.length}
         query={query} setQuery={setQuery}
-        onNav={nav} onLogout={api.logout}
+        onNav={nav} onLogout={doLogout}
         onSearch={() => nav("home")}
       />
       <main>{body}</main>
