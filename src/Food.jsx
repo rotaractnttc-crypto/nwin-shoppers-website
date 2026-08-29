@@ -27,8 +27,8 @@ export function FoodHome({ restaurants, onOpen }) {
       <div className="grid-products">
         {restaurants.length ? restaurants.map((r) => (
           <button key={r.id} className="pcard" onClick={() => onOpen(r)}>
-            <div className="pcard-img" style={{ background: "linear-gradient(135deg, #E2542D22, #E2542D0d)" }}>
-              <span style={{ fontSize: 46 }}>{CUISINE_ICONS.default}</span>
+            <div className="pcard-img" style={{ background: r.image ? "#fff" : "linear-gradient(135deg, #E2542D22, #E2542D0d)", padding: 0, overflow: "hidden" }}>
+              {r.image ? <img src={r.image} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 46 }}>{CUISINE_ICONS.default}</span>}
               {!r.is_open && <span className="discount-badge" style={{ background: "#8A8578" }}>Closed</span>}
             </div>
             <div style={{ padding: "12px 14px 14px" }}>
@@ -85,7 +85,9 @@ export function RestaurantPage({ restaurantId, onBack, foodCart, setFoodCart, fl
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {items.map((m) => (
               <div key={m.id} className="cart-row">
-                <div className="cart-thumb">🍲</div>
+                <div className="cart-thumb" style={{ overflow: "hidden", padding: 0 }}>
+                  {m.image ? <img src={m.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🍲"}
+                </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{m.name}</div>
                   <div style={{ fontSize: 12, color: "#8A8578" }}>{m.description}</div>
@@ -145,12 +147,34 @@ export function FoodCartPage({ foodCart, setFoodCart, onCheckout }) {
   );
 }
 
-export function FoodCheckoutPage({ foodCart, onPlace, busy }) {
+export function FoodCheckoutPage({ foodCart, onPlace, busy, flash }) {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [payment, setPayment] = useState("cod");
+  const [coords, setCoords] = useState(null);
+  const [quote, setQuote] = useState(null);
+  const [locatingBusy, setLocatingBusy] = useState(false);
   const subtotal = foodCart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const deliveryFee = quote ? quote.fee : 3000;
   const canSubmit = address.trim().length >= 5 && phone.trim().length >= 7 && !busy;
+
+  const captureLocation = () => {
+    if (!navigator.geolocation) return flash("Location isn't available in this browser");
+    setLocatingBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        setCoords(c);
+        setLocatingBusy(false);
+        try {
+          const q = await api.quoteFoodDeliveryFee({ restaurant_id: foodCart[0]?.restaurant_id, delivery_latitude: c.latitude, delivery_longitude: c.longitude });
+          setQuote(q);
+        } catch { /* best-effort */ }
+      },
+      (err) => { flash("Couldn't get your location: " + err.message); setLocatingBusy(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   return (
     <div className="container" style={{ paddingBottom: 40 }}>
@@ -159,6 +183,9 @@ export function FoodCheckoutPage({ foodCart, onPlace, busy }) {
         <div style={{ flex: 1 }}>
           <label className="field-label"><MapPin size={12} /> Deliver to</label>
           <textarea className="addr-input" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. Plot 12, Kigo Road, Nwin Town" />
+          <button type="button" className="mini-btn" style={{ marginTop: 8 }} onClick={captureLocation} disabled={locatingBusy}>
+            {locatingBusy ? "Getting location..." : coords ? "📍 Location set — improves delivery fee accuracy" : "📍 Share my location for accurate delivery pricing"}
+          </button>
           <label className="field-label">Delivery phone</label>
           <input className="text-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+2567..." />
           <label className="field-label">Payment method</label>
@@ -173,10 +200,10 @@ export function FoodCheckoutPage({ foodCart, onPlace, busy }) {
         </div>
         <div className="summary" style={{ minWidth: 280 }}>
           <div className="sumrow"><span>Subtotal</span><span>{money(subtotal)}</span></div>
-          <div className="sumrow"><span>Delivery</span><span>{money(3000)}</span></div>
-          <div className="sumrow total"><span>Total</span><span>{money(subtotal + 3000)}</span></div>
+          <div className="sumrow"><span>Delivery{quote?.estimated ? ` (${quote.distanceKm} km)` : " (estimate)"}</span><span>{money(deliveryFee)}</span></div>
+          <div className="sumrow total"><span>Total</span><span>{money(subtotal + deliveryFee)}</span></div>
           <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} disabled={!canSubmit}
-            onClick={() => onPlace({ address, phone, payment })}>
+            onClick={() => onPlace({ address, phone, payment, latitude: coords?.latitude, longitude: coords?.longitude })}>
             <ShieldCheck size={16} /> {busy ? "Placing order..." : "Place order"}
           </button>
         </div>
@@ -286,7 +313,7 @@ export function RestaurantDashboard({ restaurant, onApply, applyBusy, flash }) {
     api.restaurantOrders(restaurant.id).then(setOrders).catch(() => {});
   }, [restaurant, tab]);
 
-  if (!restaurant) return <ApplyRestaurantForm onApply={onApply} busy={applyBusy} />;
+  if (!restaurant) return <ApplyRestaurantForm onApply={onApply} busy={applyBusy} flash={flash} />;
 
   const advance = async (id, status) => {
     try {
@@ -337,22 +364,82 @@ export function RestaurantDashboard({ restaurant, onApply, applyBusy, flash }) {
   );
 }
 
-function ApplyRestaurantForm({ onApply, busy }) {
-  const [form, setForm] = useState({ name: "", description: "", location: "", cuisine_type: "", phone: "" });
+// Captures the browser's GPS position with one tap — this is what powers
+// the distance-based delivery fee, no manual map-pin-dropping required.
+function LocationPicker({ latitude, longitude, onCapture, flash }) {
+  const [busy, setBusy] = useState(false);
+  const capture = () => {
+    if (!navigator.geolocation) return flash("Location isn't available in this browser");
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { onCapture(pos.coords.latitude, pos.coords.longitude); setBusy(false); },
+      (err) => { flash("Couldn't get your location: " + err.message); setBusy(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <label className="field-label"><MapPin size={12} /> Pickup location (for delivery pricing)</label>
+      <button type="button" className="mini-btn" style={{ marginTop: 6 }} onClick={capture} disabled={busy}>
+        {busy ? "Getting location..." : latitude ? "📍 Location set — tap to update" : "📍 Use my current location"}
+      </button>
+      {latitude && <div style={{ fontSize: 11, color: "#8A8578", marginTop: 4 }}>{Number(latitude).toFixed(5)}, {Number(longitude).toFixed(5)}</div>}
+    </div>
+  );
+}
+
+// One-photo uploader used for restaurant logos and menu item photos —
+// shows a preview, uploads on submit via the given API call.
+function PhotoPicker({ label, preview, onFile }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <label className="field-label">{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 10, background: "#F2EFE4", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {preview ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 22 }}>📷</span>}
+        </div>
+        <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && onFile(e.target.files[0])} />
+      </div>
+    </div>
+  );
+}
+
+function ApplyRestaurantForm({ onApply, busy, flash }) {
+  const [form, setForm] = useState({ name: "", description: "", location: "", cuisine_type: "", phone: "", latitude: null, longitude: null });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+
+  const pickPhoto = (file) => { setPhotoFile(file); setPreview(URL.createObjectURL(file)); };
+
+  const submit = async () => {
+    let image = null;
+    if (photoFile) {
+      try {
+        const form2 = new FormData();
+        form2.append("image", photoFile);
+        const { url } = await api.uploadRestaurantLogo(form2);
+        image = url;
+      } catch (e) { flash(e.message); return; }
+    }
+    onApply({ ...form, image });
+  };
+
   return (
     <div className="container" style={{ maxWidth: 480, padding: "40px 16px" }}>
       <div className="section-head">Add your restaurant to Nwin Plus</div>
+      <PhotoPicker label="Restaurant logo" preview={preview} onFile={pickPhoto} />
       <label className="field-label">Restaurant name</label>
       <input className="text-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       <label className="field-label">Cuisine type</label>
       <input className="text-input" value={form.cuisine_type} onChange={(e) => setForm({ ...form, cuisine_type: e.target.value })} placeholder="e.g. Ugandan, Fast food, Grill" />
-      <label className="field-label">Location</label>
+      <label className="field-label">Location (address text)</label>
       <input className="text-input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+      <LocationPicker latitude={form.latitude} longitude={form.longitude} flash={flash} onCapture={(lat, lng) => setForm({ ...form, latitude: lat, longitude: lng })} />
       <label className="field-label">Phone</label>
       <input className="text-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+2567..." />
       <label className="field-label">Description</label>
       <textarea className="text-input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-      <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} disabled={!form.name || busy} onClick={() => onApply(form)}>
+      <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} disabled={!form.name || busy} onClick={submit}>
         {busy ? "Submitting..." : "Apply"}
       </button>
     </div>
@@ -361,14 +448,27 @@ function ApplyRestaurantForm({ onApply, busy }) {
 
 function RestaurantMenuManager({ restaurantId, menuItems, setMenuItems, flash }) {
   const [form, setForm] = useState({ name: "", price: "", category: "main", description: "" });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  const pickPhoto = (file) => { setPhotoFile(file); setPreview(URL.createObjectURL(file)); };
 
   const submit = async () => {
     setBusy(true);
     try {
-      const item = await api.createMenuItem({ restaurant_id: restaurantId, ...form, price: Number(form.price) });
+      let image = null;
+      if (photoFile) {
+        const form2 = new FormData();
+        form2.append("image", photoFile);
+        const { url } = await api.uploadMenuItemPhoto(form2);
+        image = url;
+      }
+      const item = await api.createMenuItem({ restaurant_id: restaurantId, ...form, price: Number(form.price), image });
       setMenuItems((m) => [item, ...m]);
       setForm({ name: "", price: "", category: "main", description: "" });
+      setPhotoFile(null);
+      setPreview(null);
       flash("Submitted for admin approval");
     } catch (e) { flash(e.message); } finally { setBusy(false); }
   };
@@ -376,6 +476,7 @@ function RestaurantMenuManager({ restaurantId, menuItems, setMenuItems, flash })
   return (
     <div>
       <div style={{ maxWidth: 420, marginBottom: 20 }}>
+        <PhotoPicker label="Photo" preview={preview} onFile={pickPhoto} />
         <label className="field-label">Item name</label>
         <input className="text-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <label className="field-label">Price (UGX)</label>
@@ -393,7 +494,9 @@ function RestaurantMenuManager({ restaurantId, menuItems, setMenuItems, flash })
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {menuItems.map((m) => (
           <div key={m.id} className="cart-row">
-            <div className="cart-thumb">🍲</div>
+            <div className="cart-thumb" style={{ overflow: "hidden", padding: 0 }}>
+              {m.image ? <img src={m.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🍲"}
+            </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{m.name}</div>
               <div style={{ fontSize: 12, color: "#8A8578" }}>{money(m.price)}</div>

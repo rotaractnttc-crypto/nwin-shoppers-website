@@ -46,15 +46,27 @@ const money = (n) => "UGX " + Math.round(Number(n) || 0).toLocaleString();
 
 function toUiProduct(p) {
   const cat = CATS.find((c) => c.id === p.category) || CATS[0];
+  const images = Array.isArray(p.images) ? p.images : [];
   return {
     id: p.id, name: p.name, price: Number(p.price),
     was: p.was_price ? Number(p.was_price) : undefined,
     cat: p.category || cat.id, sellerId: p.seller_id, sellerName: p.seller_name,
     nwin: !!p.made_in_nwin, special: !!p.is_special, deal: !!p.is_deal,
     rating: Number(p.rating_avg) || 0, revCount: Number(p.rating_count) || 0,
-    emoji: cat.icon, desc: p.description || "No description provided.",
+    emoji: cat.icon, images, photo: images[0] || null,
+    desc: p.description || "No description provided.",
     stock: p.stock, status: p.status,
   };
+}
+
+// Renders a real uploaded photo when one exists, falling back to the
+// category emoji tile otherwise — so listings never look broken while a
+// seller hasn't added photos yet, but do show real photos once they have.
+function Thumb({ photo, emoji, size = 46, style }) {
+  if (photo) {
+    return <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", ...style }} />;
+  }
+  return <span style={{ fontSize: size, ...style }}>{emoji}</span>;
 }
 
 function FlashTimer() {
@@ -89,8 +101,8 @@ function ProductCard({ p, onOpen, wishlist, onToggleWish }) {
   const wished = wishlist.includes(p.id);
   return (
     <button className="pcard" onClick={() => onOpen(p)}>
-      <div className="pcard-img" style={{ background: `linear-gradient(135deg, ${cat.color}22, ${cat.color}0d)` }}>
-        <span style={{ fontSize: 46 }}>{p.emoji}</span>
+      <div className="pcard-img" style={{ background: p.photo ? "#fff" : `linear-gradient(135deg, ${cat.color}22, ${cat.color}0d)`, padding: 0, overflow: "hidden" }}>
+        <Thumb photo={p.photo} emoji={p.emoji} size={46} />
         {p.nwin && <Stamp style={{ position: "absolute", top: 10, left: 10 }}>Nwin made</Stamp>}
         <button className="card-heart" onClick={(e) => { e.stopPropagation(); onToggleWish(p.id); }}>
           <Heart size={14} fill={wished ? "#E2542D" : "none"} color={wished ? "#E2542D" : "#8A8578"} />
@@ -480,17 +492,34 @@ function WishlistPage({ products, wishlist, onOpen, onToggleWish }) {
 
 function ProductPage({ product, onBack, onAddToCart, onBuyNow, wishlist, onToggleWish, flash, reviews }) {
   const [qty, setQty] = useState(1);
+  const [activePhoto, setActivePhoto] = useState(0);
   const cat = CATS.find((c) => c.id === product.cat) || CATS[0];
   const wished = wishlist.includes(product.id);
+  const photos = product.images || [];
   return (
     <div className="container">
       <button className="linkbtn" style={{ margin: "16px 0", display: "flex", alignItems: "center", gap: 4 }} onClick={onBack}>
         <ChevronRight size={14} style={{ transform: "rotate(180deg)" }} /> Back
       </button>
       <div className="product-layout">
-        <div className="pd-img" style={{ background: `linear-gradient(135deg, ${cat.color}33, ${cat.color}11)` }}>
-          <span style={{ fontSize: 130 }}>{product.emoji}</span>
-          {product.nwin && <Stamp style={{ position: "absolute", top: 16, left: 16, fontSize: 12 }}>Made in Nwin</Stamp>}
+        <div>
+          <div className="pd-img" style={{ background: photos.length ? "#fff" : `linear-gradient(135deg, ${cat.color}33, ${cat.color}11)` }}>
+            {photos.length ? (
+              <img src={photos[activePhoto]} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <span style={{ fontSize: 130 }}>{product.emoji}</span>
+            )}
+            {product.nwin && <Stamp style={{ position: "absolute", top: 16, left: 16, fontSize: 12 }}>Made in Nwin</Stamp>}
+          </div>
+          {photos.length > 1 && (
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              {photos.map((src, i) => (
+                <button key={i} onClick={() => setActivePhoto(i)} style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: i === activePhoto ? `2px solid ${cat.color}` : "1px solid #EFE9D9", padding: 0, cursor: "pointer" }}>
+                  <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="pd-info">
           <div style={{ fontSize: 13, color: "#8A8578", display: "flex", alignItems: "center", gap: 8 }}>
@@ -587,21 +616,42 @@ function CartPage({ cart, products, setCart, onCheckout }) {
   );
 }
 
-function CheckoutPage({ cart, products, points, onPlace, busy }) {
+function CheckoutPage({ cart, products, points, onPlace, busy, flash }) {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [payment, setPayment] = useState("cod");
   const [couponInput, setCouponInput] = useState("");
+  const [coords, setCoords] = useState(null);
+  const [quote, setQuote] = useState(null);
+  const [locatingBusy, setLocatingBusy] = useState(false);
 
   const items = cart.map((c) => ({ ...c, product: products.find((p) => p.id === c.id) })).filter((i) => i.product);
   const subtotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
-  const deliveryFee = subtotal > 100000 ? 0 : 5000;
+  const deliveryFee = quote ? quote.fee : (subtotal > 100000 ? 0 : 5000);
   const methods = [
     { id: "cod", label: "Cash on Delivery", icon: Banknote, tag: "Most popular" },
     { id: "momo", label: "Mobile Money (MTN / Airtel)", icon: Smartphone },
     { id: "card", label: "Card", icon: CreditCard },
   ];
   const canSubmit = address.trim().length >= 5 && phone.trim().length >= 7 && !busy;
+
+  const captureLocation = () => {
+    if (!navigator.geolocation) return flash("Location isn't available in this browser");
+    setLocatingBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        setCoords(c);
+        setLocatingBusy(false);
+        try {
+          const q = await api.quoteDeliveryFee({ items: cart.map((i) => ({ product_id: i.id })), delivery_latitude: c.latitude, delivery_longitude: c.longitude });
+          setQuote(q);
+        } catch { /* quote is best-effort */ }
+      },
+      (err) => { flash("Couldn't get your location: " + err.message); setLocatingBusy(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   return (
     <div className="container">
@@ -610,6 +660,9 @@ function CheckoutPage({ cart, products, points, onPlace, busy }) {
         <div style={{ flex: 1 }}>
           <label className="field-label"><MapPin size={12} /> Deliver to</label>
           <textarea className="addr-input" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. Plot 12, Kigo Road, Nwin Town" />
+          <button type="button" className="mini-btn" style={{ marginTop: 8 }} onClick={captureLocation} disabled={locatingBusy}>
+            {locatingBusy ? "Getting location..." : coords ? "📍 Location set — improves delivery fee accuracy" : "📍 Share my location for accurate delivery pricing"}
+          </button>
           <label className="field-label">Delivery phone</label>
           <input className="text-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+2567..." />
 
@@ -631,10 +684,10 @@ function CheckoutPage({ cart, products, points, onPlace, busy }) {
         </div>
         <div className="summary" style={{ minWidth: 300 }}>
           <div className="sumrow"><span>Subtotal</span><span>{money(subtotal)}</span></div>
-          <div className="sumrow"><span>Delivery</span><span>{money(deliveryFee)}</span></div>
+          <div className="sumrow"><span>Delivery{quote?.estimated ? ` (${quote.distanceKm} km)` : " (estimate)"}</span><span>{money(deliveryFee)}</span></div>
           <div className="sumrow total"><span>Total (before coupon)</span><span>{money(subtotal + deliveryFee)}</span></div>
           <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} disabled={!canSubmit}
-            onClick={() => onPlace({ address, phone, payment, couponInput })}>
+            onClick={() => onPlace({ address, phone, payment, couponInput, latitude: coords?.latitude, longitude: coords?.longitude })}>
             <ShieldCheck size={16} /> {busy ? "Placing order..." : "Place order"}
           </button>
         </div>
@@ -782,8 +835,21 @@ function SellPage({ user, seller, onApply, busy, flash }) {
       <input className="text-input" value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })} placeholder="e.g. Mama Ruth Fabrics" />
       <label className="field-label">Description</label>
       <textarea className="text-input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What do you sell?" />
-      <label className="field-label">Location</label>
+      <label className="field-label">Location (address text)</label>
       <input className="text-input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Nwin Central Market" />
+      <div style={{ marginTop: 12 }}>
+        <label className="field-label"><MapPin size={12} /> Pickup point (for delivery pricing)</label>
+        <button type="button" className="mini-btn" style={{ marginTop: 6 }} onClick={() => {
+          if (!navigator.geolocation) return flash("Location isn't available in this browser");
+          navigator.geolocation.getCurrentPosition(
+            (pos) => setForm((f) => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude })),
+            (err) => flash("Couldn't get location: " + err.message),
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        }}>
+          {form.latitude ? `📍 ${form.latitude.toFixed(5)}, ${form.longitude.toFixed(5)}` : "📍 Use my current location"}
+        </button>
+      </div>
       <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 18 }} disabled={!form.business_name || busy} onClick={() => onApply(form)}>
         {busy ? "Submitting..." : "Apply to sell"}
       </button>
@@ -907,7 +973,7 @@ function SellerAddProductForm({ onSubmit, busy }) {
 function AdminConsole({
   pendingSellers, pendingProducts, stats, onApproveSeller, onApproveProduct,
   pendingRestaurants, pendingMenuItems, onApproveRestaurant, onApproveMenuItem,
-  onAddRestaurantDirect, addRestaurantBusy,
+  onAddRestaurantDirect, addRestaurantBusy, flash,
 }) {
   const [showAddRestaurant, setShowAddRestaurant] = useState(false);
 
@@ -961,7 +1027,7 @@ function AdminConsole({
         <span>🍔 Restaurants — pending ({pendingRestaurants.length})</span>
         <button className="mini-btn" onClick={() => setShowAddRestaurant((v) => !v)}>{showAddRestaurant ? "Cancel" : "+ Add restaurant directly"}</button>
       </div>
-      {showAddRestaurant && <AdminAddRestaurantForm onSubmit={onAddRestaurantDirect} busy={addRestaurantBusy} />}
+      {showAddRestaurant && <AdminAddRestaurantForm onSubmit={onAddRestaurantDirect} busy={addRestaurantBusy} flash={flash} />}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {!pendingRestaurants.length && <div className="empty">All caught up</div>}
         {pendingRestaurants.map((r) => (
@@ -995,17 +1061,55 @@ function AdminConsole({
   );
 }
 
-function AdminAddRestaurantForm({ onSubmit, busy }) {
-  const [form, setForm] = useState({ name: "", cuisine_type: "", location: "", phone: "", avg_prep_minutes: "20", description: "" });
+function AdminAddRestaurantForm({ onSubmit, busy, flash }) {
+  const [form, setForm] = useState({ name: "", cuisine_type: "", location: "", phone: "", avg_prep_minutes: "20", description: "", latitude: null, longitude: null });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pickPhoto = (file) => { setPhotoFile(file); setPreview(URL.createObjectURL(file)); };
+
+  const captureLocation = () => {
+    if (!navigator.geolocation) return flash("Location isn't available in this browser");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setForm((f) => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude })),
+      (err) => flash("Couldn't get location: " + err.message),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const submit = async () => {
+    setUploading(true);
+    try {
+      let image = null;
+      if (photoFile) {
+        const fd = new FormData();
+        fd.append("image", photoFile);
+        const { url } = await api.uploadRestaurantLogo(fd);
+        image = url;
+      }
+      onSubmit({ ...form, avg_prep_minutes: Number(form.avg_prep_minutes) || 20, image });
+    } catch (e) { flash(e.message); } finally { setUploading(false); }
+  };
+
   return (
     <div className="cart-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 50, height: 50, borderRadius: 10, background: "#F2EFE4", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {preview ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 20 }}>📷</span>}
+        </div>
+        <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && pickPhoto(e.target.files[0])} />
+      </div>
       <input className="text-input" style={{ marginTop: 0 }} placeholder="Restaurant name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       <input className="text-input" placeholder="Cuisine type" value={form.cuisine_type} onChange={(e) => setForm({ ...form, cuisine_type: e.target.value })} />
-      <input className="text-input" placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+      <input className="text-input" placeholder="Location (address text)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+      <button className="mini-btn" type="button" onClick={captureLocation} style={{ alignSelf: "flex-start" }}>
+        {form.latitude ? `📍 ${form.latitude.toFixed(5)}, ${form.longitude.toFixed(5)}` : "📍 Use my current location"}
+      </button>
       <input className="text-input" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
       <input className="text-input" type="number" placeholder="Avg prep minutes" value={form.avg_prep_minutes} onChange={(e) => setForm({ ...form, avg_prep_minutes: e.target.value })} />
-      <button className="btn-primary" disabled={!form.name || busy} onClick={() => onSubmit({ ...form, avg_prep_minutes: Number(form.avg_prep_minutes) || 20 })}>
-        {busy ? "Adding..." : "Add restaurant (goes live immediately)"}
+      <button className="btn-primary" disabled={!form.name || busy || uploading} onClick={submit}>
+        {busy || uploading ? "Adding..." : "Add restaurant (goes live immediately)"}
       </button>
     </div>
   );
@@ -1178,7 +1282,7 @@ export default function App() {
     nav("checkout");
   };
 
-  const placeOrder = async ({ address, phone, payment, couponInput }) => {
+  const placeOrder = async ({ address, phone, payment, couponInput, latitude, longitude }) => {
     if (!user) { flash("Log in to place an order"); nav("auth"); return; }
     if (!requireVerified()) { flash("Please verify your email before checking out"); return; }
     setBusy(true);
@@ -1187,6 +1291,7 @@ export default function App() {
         items: cart.map((c) => ({ product_id: c.id, quantity: c.qty })),
         payment_method: payment, delivery_address: address, delivery_phone: phone,
         coupon_code: couponInput || undefined,
+        delivery_latitude: latitude, delivery_longitude: longitude,
       });
       setCart([]);
       setActiveOrder(order);
@@ -1263,7 +1368,7 @@ export default function App() {
 
   const openRestaurant = (r) => { setActiveRestaurantId(r.id); nav("restaurant"); };
 
-  const placeFoodOrder = async ({ address, phone, payment }) => {
+  const placeFoodOrder = async ({ address, phone, payment, latitude, longitude }) => {
     if (!user) { flash("Log in to place an order"); nav("auth"); return; }
     if (!requireVerified()) { flash("Please verify your email before checking out"); return; }
     if (!foodCart.length) return;
@@ -1273,6 +1378,7 @@ export default function App() {
         restaurant_id: foodCart[0].restaurant_id,
         items: foodCart.map((i) => ({ menu_item_id: i.menu_item_id, quantity: i.quantity })),
         payment_method: payment, delivery_address: address, delivery_phone: phone,
+        delivery_latitude: latitude, delivery_longitude: longitude,
       });
       setFoodCart([]);
       setActiveFoodOrderId(order.id);
@@ -1350,7 +1456,7 @@ export default function App() {
   else if (page === "wishlist") body = <WishlistPage products={products} wishlist={wishlist} onOpen={openProduct} onToggleWish={toggleWish} />;
   else if (page === "product") body = <ProductPage product={activeProduct} onBack={() => nav(activeCat ? "category" : "home")} onAddToCart={addToCart} onBuyNow={buyNow} wishlist={wishlist} onToggleWish={toggleWish} flash={flash} reviews={productReviews[activeProduct?.id]} />;
   else if (page === "cart") body = <CartPage cart={cart} products={products} setCart={setCart} onCheckout={() => user ? nav("checkout") : (flash("Log in to checkout"), nav("auth"))} />;
-  else if (page === "checkout") body = <CheckoutPage cart={cart} products={products} points={user?.points || 0} onPlace={placeOrder} busy={busy} />;
+  else if (page === "checkout") body = <CheckoutPage cart={cart} products={products} points={user?.points || 0} onPlace={placeOrder} busy={busy} flash={flash} />;
   else if (page === "tracking") body = <TrackingPage order={activeOrder} onRate={rateOrder} ratedIds={ratedOrderIds} />;
   else if (page === "orders") body = user ? <OrdersPage user={user} orders={orders} onTrack={(o) => { setActiveOrder(o); nav("tracking"); }} points={user.points || 0} /> : <AuthPage onLogin={api.login} onRegister={doRegister} onGoogle={doGoogle} flash={flash} />;
   else if (page === "sell") body = <SellPage user={user} seller={seller} onApply={applySeller} busy={busy} flash={flash} />;
@@ -1358,13 +1464,13 @@ export default function App() {
     const tab = page === "seller-add" ? "add" : page === "seller-orders" ? "orders" : "overview";
     body = <SellerDashboard seller={seller} myProducts={myProducts} myOrders={myOrders} tab={tab} onNav={nav} flash={flash} onAddProduct={addSellerProduct} onUpdateOrderStatus={updateOrderStatus} addBusy={addBusy} />;
   }
-  else if (page === "admin-home") body = <AdminConsole pendingSellers={pendingSellers} pendingProducts={pendingProducts} stats={adminStats} onApproveSeller={approveSeller} onApproveProduct={approveProduct} pendingRestaurants={pendingRestaurants} pendingMenuItems={pendingMenuItems} onApproveRestaurant={approveRestaurant} onApproveMenuItem={approveMenuItem} onAddRestaurantDirect={addRestaurantDirect} addRestaurantBusy={addRestaurantBusy} />;
+  else if (page === "admin-home") body = <AdminConsole pendingSellers={pendingSellers} pendingProducts={pendingProducts} stats={adminStats} onApproveSeller={approveSeller} onApproveProduct={approveProduct} pendingRestaurants={pendingRestaurants} pendingMenuItems={pendingMenuItems} onApproveRestaurant={approveRestaurant} onApproveMenuItem={approveMenuItem} onAddRestaurantDirect={addRestaurantDirect} addRestaurantBusy={addRestaurantBusy} flash={flash} />;
   else if (page === "verify-otp") body = <OtpPage email={pendingVerifyEmail || user?.email} flash={flash} onVerified={async () => { const me = await api.fetchMe(); setUser(me); nav("home"); }} />;
   else if (page === "auth") body = user ? <OrdersPage user={user} orders={orders} onTrack={(o) => { setActiveOrder(o); nav("tracking"); }} points={user.points || 0} /> : <AuthPage onLogin={api.login} onRegister={doRegister} onGoogle={doGoogle} flash={flash} />;
   else if (page === "food-home") body = <FoodHome restaurants={restaurants} onOpen={openRestaurant} />;
   else if (page === "restaurant") body = <RestaurantPage restaurantId={activeRestaurantId} onBack={() => nav("food-home")} foodCart={foodCart} setFoodCart={setFoodCart} flash={flash} />;
   else if (page === "food-cart") body = <FoodCartPage foodCart={foodCart} setFoodCart={setFoodCart} onCheckout={() => user ? nav("food-checkout") : (flash("Log in to checkout"), nav("auth"))} />;
-  else if (page === "food-checkout") body = <FoodCheckoutPage foodCart={foodCart} onPlace={placeFoodOrder} busy={foodOrderBusy} />;
+  else if (page === "food-checkout") body = <FoodCheckoutPage foodCart={foodCart} onPlace={placeFoodOrder} busy={foodOrderBusy} flash={flash} />;
   else if (page === "food-tracking") body = <FoodTrackingPage orderId={activeFoodOrderId} flash={flash} />;
   else if (page === "restaurant-dashboard") body = <RestaurantDashboard restaurant={myRestaurant} onApply={applyRestaurant} applyBusy={restaurantApplyBusy} flash={flash} />;
   else if (page === "rider-dashboard") body = user?.role === "rider" ? <RiderDashboard flash={flash} /> : <div className="container" style={{ padding: 40 }}>Rider access only.</div>;
@@ -1443,13 +1549,14 @@ function SiteStyles() {
       @media (min-width: 900px) { .grid-products { grid-template-columns: repeat(4, 1fr); } }
       @media (min-width: 1150px) { .grid-products { grid-template-columns: repeat(5, 1fr); } }
 
-      .pcard { background: #fff; border: 1px solid #EFE9D9; border-radius: 16px; overflow: hidden; text-align: left; cursor: pointer; padding: 0; display: flex; flex-direction: column; transition: box-shadow .15s, transform .15s; }
-      .pcard:hover { box-shadow: 0 10px 24px rgba(0,0,0,0.06); transform: translateY(-2px); }
-      .pcard-img { position: relative; height: 150px; display: flex; align-items: center; justify-content: center; }
-      .pcard-name { font-size: 13.5px; font-weight: 600; color: #1C2B22; line-height: 1.3; min-height: 34px; }
-      .card-heart { position: absolute; top: 10px; right: 10px; background: #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; }
-      .discount-badge { position: absolute; bottom: 10px; right: 10px; background: #E2542D; color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 5px; font-family: 'Space Grotesk',sans-serif; }
-      .stamp { display: inline-block; border: 1.5px solid #1B5E3A; color: #1B5E3A; font-family: 'Space Grotesk',sans-serif; font-weight: 700; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; background: #fff; }
+      .pcard { background: #fff; border: 1px solid #EFE9D9; border-radius: 14px; overflow: hidden; text-align: left; cursor: pointer; padding: 0; display: flex; flex-direction: column; transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; box-shadow: 0 1px 2px rgba(28,43,34,0.04); }
+      .pcard:hover { box-shadow: 0 14px 28px rgba(28,43,34,0.10); transform: translateY(-3px); border-color: #E4DCC6; }
+      .pcard-img { position: relative; aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; background: #F7F4EA; }
+      .pcard-img img { display: block; }
+      .pcard-name { font-size: 13px; font-weight: 600; color: #1C2B22; line-height: 1.35; min-height: 36px; letter-spacing: -0.01em; }
+      .card-heart { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.92); backdrop-filter: blur(2px); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+      .discount-badge { position: absolute; bottom: 10px; right: 10px; background: #E2542D; color: #fff; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; font-family: 'Space Grotesk',sans-serif; box-shadow: 0 2px 6px rgba(226,84,45,0.35); }
+      .stamp { display: inline-block; border: 1.5px solid #1B5E3A; color: #1B5E3A; font-family: 'Space Grotesk',sans-serif; font-weight: 700; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
       .empty { grid-column: 1 / -1; text-align: center; color: #A69B87; font-size: 13.5px; padding: 40px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 

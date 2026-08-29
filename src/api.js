@@ -131,6 +131,12 @@ export const api = {
     [...files].forEach((f) => form.append("images", f));
     return request("/uploads/product-images", { method: "POST", body: form, isForm: true }).then((d) => d.urls);
   },
+  uploadRestaurantLogo(formData) {
+    return request("/uploads/restaurant-logo", { method: "POST", body: formData, isForm: true });
+  },
+  uploadMenuItemPhoto(formData) {
+    return request("/uploads/menu-item-photo", { method: "POST", body: formData, isForm: true });
+  },
 
   // ---------- sellers ----------
   applySeller(payload) {
@@ -152,6 +158,9 @@ export const api = {
   // ---------- orders ----------
   placeOrder(payload) {
     return request("/orders", { method: "POST", body: payload });
+  },
+  quoteDeliveryFee(payload) {
+    return request("/orders/quote", { method: "POST", body: payload });
   },
   myOrders() {
     return request("/orders").then((d) => d.orders);
@@ -236,6 +245,9 @@ export const api = {
   // ---------- food orders ----------
   placeFoodOrder(payload) {
     return request("/food-orders", { method: "POST", body: payload });
+  },
+  quoteFoodDeliveryFee(payload) {
+    return request("/food-orders/quote", { method: "POST", body: payload });
   },
   myFoodOrders() {
     return request("/food-orders").then((d) => d.orders);
