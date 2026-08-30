@@ -123,6 +123,9 @@ export const api = {
   createProduct(payload) {
     return request("/products", { method: "POST", body: payload }).then((d) => d.product);
   },
+  updateProduct(id, payload) {
+    return request(`/products/${id}`, { method: "PUT", body: payload }).then((d) => d.product);
+  },
   sellerMine() {
     return request("/products/mine").then((d) => d.products);
   },
@@ -214,6 +217,9 @@ export const api = {
   },
   myRestaurant() {
     return request("/restaurants/mine/status").then((d) => d.restaurant);
+  },
+  claimRestaurant() {
+    return request("/restaurants/claim", { method: "POST" }).then((d) => d.restaurant);
   },
   updateRestaurant(id, payload) {
     return request(`/restaurants/${id}`, { method: "PATCH", body: payload }).then((d) => d.restaurant);

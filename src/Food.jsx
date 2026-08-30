@@ -446,6 +446,29 @@ function ApplyRestaurantForm({ onApply, busy, flash }) {
   );
 }
 
+// Lets an admin manage the menu for ANY restaurant — including ones added
+// directly (no owner account, so RestaurantDashboard's owner-only flow
+// doesn't apply to them). Backend already allows admin on these endpoints;
+// this just gives it a screen to use.
+export function AdminManageMenuPage({ restaurantId, restaurantName, flash, onBack }) {
+  const [menuItems, setMenuItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.myMenu(restaurantId).then((rows) => { setMenuItems(rows); setLoading(false); }).catch((e) => { flash(e.message); setLoading(false); });
+  }, [restaurantId]);
+
+  return (
+    <div className="container" style={{ paddingBottom: 40 }}>
+      <button className="linkbtn" style={{ margin: "16px 0" }} onClick={onBack}>← Back to admin console</button>
+      <div className="section-head">🍲 Menu — {restaurantName}</div>
+      {loading ? <div className="empty">Loading…</div> : (
+        <RestaurantMenuManager restaurantId={restaurantId} menuItems={menuItems} setMenuItems={setMenuItems} flash={flash} />
+      )}
+    </div>
+  );
+}
+
 function RestaurantMenuManager({ restaurantId, menuItems, setMenuItems, flash }) {
   const [form, setForm] = useState({ name: "", price: "", category: "main", description: "" });
   const [photoFile, setPhotoFile] = useState(null);

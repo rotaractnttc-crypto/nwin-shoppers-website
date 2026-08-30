@@ -4,13 +4,13 @@ import {
   MapPin, CreditCard, Smartphone, Banknote, ShieldCheck, Store, Globe,
   Percent, MessageCircle, Flag, ShoppingBag, LogOut, Menu, Clock,
   CheckCircle2, Truck, PackageCheck, Bike, Gift, Copy, Sparkles, Facebook,
-  Instagram, Twitter, Users,
+  Instagram, Twitter, Users, BadgeCheck,
 } from "lucide-react";
 import { api, setAuthChangeListener } from "./api";
 import { disconnectSocket } from "./socket";
 import {
   FoodHome, RestaurantPage, FoodCartPage, FoodCheckoutPage, FoodTrackingPage,
-  RestaurantDashboard, RiderDashboard,
+  RestaurantDashboard, RiderDashboard, AdminManageMenuPage,
 } from "./Food";
 
 /* ---------------------------------------------------------------
@@ -197,10 +197,10 @@ function Footer({ onNav }) {
           <p style={{ fontSize: 12.5, color: "#C9C2AF", marginTop: 10, maxWidth: 260 }}>
             Everything you need, all in one place. Shop, sell, and grow with Nwin Shoppers.
           </p>
-          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-            <Facebook size={16} color="#C9C2AF" />
-            <Instagram size={16} color="#C9C2AF" />
-            <Twitter size={16} color="#C9C2AF" />
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <div className="footer-social"><Facebook size={15} color="#EDE7D6" /></div>
+            <div className="footer-social"><Instagram size={15} color="#EDE7D6" /></div>
+            <div className="footer-social"><Twitter size={15} color="#EDE7D6" /></div>
           </div>
         </div>
         <div className="footer-col">
@@ -396,15 +396,28 @@ function Home({ products, onOpen, onCat, wishlist, onToggleWish, query, filterDe
   return (
     <>
       <div className="hero">
+        <div className="hero-blob hero-blob-1" />
+        <div className="hero-blob hero-blob-2" />
         <div className="hero-inner">
           <div className="hero-text">
-            <div className="eyebrow">SHOP · SELL · SAVE · SMILE</div>
+            <div className="eyebrow">🛍️ SHOP · SELL · SAVE · SMILE</div>
             <h1>Everything you need,<br />all in one place</h1>
-            <p>Nwin Shoppers is Uganda's homegrown marketplace — buy from trusted local sellers, or start selling in minutes.</p>
-            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-              <button className="btn-primary" onClick={() => document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" })}>Start shopping</button>
+            <p>Uganda's homegrown marketplace — buy from trusted local sellers, order food, or start selling in minutes.</p>
+            <div style={{ display: "flex", gap: 12, marginTop: 24, flexWrap: "wrap" }}>
+              <button className="btn-cta" onClick={() => document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" })}>
+                Start shopping <ChevronRight size={17} />
+              </button>
+              <button className="btn-cta-ghost" onClick={() => document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" })}>
+                Browse deals
+              </button>
             </div>
           </div>
+        </div>
+        <div className="trust-bar">
+          <div className="trust-item"><Truck size={18} /><span>Fast delivery</span></div>
+          <div className="trust-item"><ShieldCheck size={18} /><span>Secure payments</span></div>
+          <div className="trust-item"><BadgeCheck size={18} /><span>Verified sellers</span></div>
+          <div className="trust-item"><MessageCircle size={18} /><span>24/7 support</span></div>
         </div>
       </div>
 
@@ -412,7 +425,7 @@ function Home({ products, onOpen, onCat, wishlist, onToggleWish, query, filterDe
         <div className="cat-strip">
           {CATS.map((c) => (
             <button key={c.id} className="catchip" onClick={() => onCat(c.id)}>
-              <div className="catchip-icon" style={{ background: c.color + "1a" }}>{c.icon}</div>
+              <div className="catchip-icon" style={{ background: `linear-gradient(135deg, ${c.color}1f, ${c.color}0a)` }}>{c.icon}</div>
               <span>{c.name}</span>
             </button>
           ))}
@@ -859,7 +872,7 @@ function SellPage({ user, seller, onApply, busy, flash }) {
 
 /* ---------------- SELLER DASHBOARD ---------------- */
 
-function SellerDashboard({ seller, myProducts, myOrders, onNav, tab, flash, onAddProduct, onUpdateOrderStatus, addBusy }) {
+function SellerDashboard({ seller, myProducts, myOrders, onNav, tab, flash, onAddProduct, onUpdateOrderStatus, addBusy, onEditProduct, editingProduct, onEditSubmit }) {
   if (!seller) {
     return (
       <div className="container" style={{ maxWidth: 560, padding: "60px 16px", textAlign: "center" }}>
@@ -904,19 +917,23 @@ function SellerDashboard({ seller, myProducts, myOrders, onNav, tab, flash, onAd
             {!myProducts.length && <div className="empty">No products yet</div>}
             {myProducts.map((p) => (
               <div key={p.id} className="cart-row">
-                <div className="cart-thumb">{p.emoji}</div>
+                <div className="cart-thumb" style={{ overflow: "hidden", padding: 0 }}>
+                  {p.photo ? <img src={p.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
+                </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
                   <PriceTag price={p.price} />
                 </div>
                 <span className={"status-pill " + p.status}>{p.status}</span>
+                <button className="mini-btn" onClick={() => onEditProduct(p)}>Edit</button>
               </div>
             ))}
           </div>
         </>
       )}
 
-      {tab === "add" && <SellerAddProductForm onSubmit={onAddProduct} busy={addBusy} />}
+      {tab === "add" && <ProductForm onSubmit={onAddProduct} busy={addBusy} submitLabel="Submit for approval" />}
+      {tab === "edit" && <ProductForm initial={editingProduct} onSubmit={onEditSubmit} busy={addBusy} submitLabel="Save changes" onCancel={() => onNav("seller-home")} />}
 
       {tab === "orders" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -941,29 +958,81 @@ function SellerDashboard({ seller, myProducts, myOrders, onNav, tab, flash, onAd
 
 function TrendingIcon() { return <Sparkles size={18} color="#1B5E3A" />; }
 
-function SellerAddProductForm({ onSubmit, busy }) {
-  const [form, setForm] = useState({ name: "", price: "", stock: "10", cat: "electronics", desc: "" });
-  const [files, setFiles] = useState(null);
+function ProductForm({ initial, onSubmit, busy, submitLabel, onCancel }) {
+  const [form, setForm] = useState({
+    name: initial?.name || "", price: initial?.price || "", stock: initial?.stock ?? 10,
+    cat: initial?.cat || "electronics", desc: initial?.desc || "",
+  });
+  const [photos, setPhotos] = useState((initial?.images || []).map((url, i) => ({ key: `existing-${i}`, url })));
+
+  const addFiles = (fileList) => {
+    const room = 6 - photos.length;
+    const items = Array.from(fileList).slice(0, room).map((f, i) => ({ key: `new-${Date.now()}-${i}`, url: URL.createObjectURL(f), file: f }));
+    setPhotos((p) => [...p, ...items]);
+  };
+  const removePhoto = (key) => setPhotos((p) => p.filter((x) => x.key !== key));
+  const makeCover = (key) => setPhotos((p) => { const item = p.find((x) => x.key === key); return item ? [item, ...p.filter((x) => x.key !== key)] : p; });
+
+  const submit = () => onSubmit(form, photos);
+
   return (
-    <div style={{ maxWidth: 480 }}>
-      <label className="field-label">Photos (optional)</label>
-      <input type="file" accept="image/*" multiple onChange={(e) => setFiles(e.target.files)} style={{ marginTop: 6, display: "block" }} />
-      <label className="field-label">Product name</label>
-      <input className="text-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ankara Print Dress" />
-      <label className="field-label">Price (UGX)</label>
-      <input className="text-input" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-      <label className="field-label">Stock quantity</label>
-      <input className="text-input" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
-      <label className="field-label">Category</label>
-      <select className="text-input" value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })}>
-        {CATS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
-      <label className="field-label">Description</label>
-      <textarea className="text-input" rows={3} value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} />
-      <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 18 }} disabled={!form.name || !form.price || busy}
-        onClick={() => onSubmit(form, files)}>
-        {busy ? "Submitting..." : "Submit for approval"}
-      </button>
+    <div className="form-card" style={{ maxWidth: 560 }}>
+      <div className="form-card-head">
+        <div className="form-card-icon"><ShoppingBag size={17} /></div>
+        <div>
+          <div className="form-card-title">{initial ? "Edit product" : "Add a new product"}</div>
+          <div className="form-card-sub">First photo is the cover shoppers see first — add up to 6, from different angles.</div>
+        </div>
+      </div>
+
+      <div className="photo-grid">
+        {photos.map((p, i) => (
+          <div key={p.key} className="photo-tile">
+            <img src={p.url} alt="" />
+            {i === 0 && <span className="photo-cover-badge">Cover</span>}
+            <button type="button" className="photo-remove" onClick={() => removePhoto(p.key)}>×</button>
+            {i !== 0 && <button type="button" className="photo-setcover" onClick={() => makeCover(p.key)}>Set cover</button>}
+          </div>
+        ))}
+        {photos.length < 6 && (
+          <label className="photo-add">
+            <span style={{ fontSize: 22 }}>+</span>
+            <input type="file" accept="image/*" multiple hidden onChange={(e) => e.target.files.length && addFiles(e.target.files)} />
+          </label>
+        )}
+      </div>
+
+      <div className="form-grid">
+        <div className="form-field">
+          <label className="field-label">Product name</label>
+          <input className="text-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ankara Print Dress" />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Category</label>
+          <select className="text-input" value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })}>
+            {CATS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="form-field">
+          <label className="field-label">Price (UGX)</label>
+          <input className="text-input" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Stock quantity</label>
+          <input className="text-input" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+        </div>
+      </div>
+      <div className="form-field" style={{ marginTop: 14 }}>
+        <label className="field-label">Description</label>
+        <textarea className="text-input" rows={3} value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} />
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        {onCancel && <button className="btn-secondary" style={{ width: "auto", padding: "0 20px" }} onClick={onCancel}>Cancel</button>}
+        <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} disabled={!form.name || !form.price || busy} onClick={submit}>
+          {busy ? "Saving..." : submitLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -973,7 +1042,7 @@ function SellerAddProductForm({ onSubmit, busy }) {
 function AdminConsole({
   pendingSellers, pendingProducts, stats, onApproveSeller, onApproveProduct,
   pendingRestaurants, pendingMenuItems, onApproveRestaurant, onApproveMenuItem,
-  onAddRestaurantDirect, addRestaurantBusy, flash,
+  onAddRestaurantDirect, addRestaurantBusy, flash, allRestaurants, onManageMenu,
 }) {
   const [showAddRestaurant, setShowAddRestaurant] = useState(false);
 
@@ -1057,23 +1126,42 @@ function AdminConsole({
           </div>
         ))}
       </div>
+
+      <div className="section-head">🍔 All restaurants — manage menus ({allRestaurants.length})</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {!allRestaurants.length && <div className="empty">No restaurants yet — add one above</div>}
+        {allRestaurants.map((r) => (
+          <div key={r.id} className="cart-row">
+            <div className="cart-thumb" style={{ overflow: "hidden", padding: 0 }}>
+              {r.image ? <img src={r.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🍔"}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{r.name}</div>
+              <div style={{ fontSize: 12, color: "#8A8578" }}>{r.cuisine_type} · {r.location}</div>
+            </div>
+            <button className="mini-btn" onClick={() => onManageMenu(r)}>Manage menu</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function AdminAddRestaurantForm({ onSubmit, busy, flash }) {
-  const [form, setForm] = useState({ name: "", cuisine_type: "", location: "", phone: "", avg_prep_minutes: "20", description: "", latitude: null, longitude: null });
+  const [form, setForm] = useState({ name: "", cuisine_type: "", location: "", phone: "", avg_prep_minutes: "20", description: "", manager_email: "", latitude: null, longitude: null });
   const [photoFile, setPhotoFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   const pickPhoto = (file) => { setPhotoFile(file); setPreview(URL.createObjectURL(file)); };
 
   const captureLocation = () => {
     if (!navigator.geolocation) return flash("Location isn't available in this browser");
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => setForm((f) => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude })),
-      (err) => flash("Couldn't get location: " + err.message),
+      (pos) => { setForm((f) => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude })); setLocating(false); },
+      (err) => { flash("Couldn't get location: " + err.message); setLocating(false); },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
@@ -1093,23 +1181,73 @@ function AdminAddRestaurantForm({ onSubmit, busy, flash }) {
   };
 
   return (
-    <div className="cart-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 50, height: 50, borderRadius: 10, background: "#F2EFE4", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {preview ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 20 }}>📷</span>}
+    <div className="form-card">
+      <div className="form-card-head">
+        <div className="form-card-icon"><Store size={17} /></div>
+        <div>
+          <div className="form-card-title">Add a new restaurant</div>
+          <div className="form-card-sub">Goes live on Nwin Plus immediately — no approval step needed.</div>
         </div>
-        <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && pickPhoto(e.target.files[0])} />
       </div>
-      <input className="text-input" style={{ marginTop: 0 }} placeholder="Restaurant name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      <input className="text-input" placeholder="Cuisine type" value={form.cuisine_type} onChange={(e) => setForm({ ...form, cuisine_type: e.target.value })} />
-      <input className="text-input" placeholder="Location (address text)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-      <button className="mini-btn" type="button" onClick={captureLocation} style={{ alignSelf: "flex-start" }}>
-        {form.latitude ? `📍 ${form.latitude.toFixed(5)}, ${form.longitude.toFixed(5)}` : "📍 Use my current location"}
-      </button>
-      <input className="text-input" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      <input className="text-input" type="number" placeholder="Avg prep minutes" value={form.avg_prep_minutes} onChange={(e) => setForm({ ...form, avg_prep_minutes: e.target.value })} />
-      <button className="btn-primary" disabled={!form.name || busy || uploading} onClick={submit}>
-        {busy || uploading ? "Adding..." : "Add restaurant (goes live immediately)"}
+
+      <label
+        className="dropzone"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); e.dataTransfer.files[0] && pickPhoto(e.dataTransfer.files[0]); }}
+      >
+        {preview ? (
+          <img src={preview} alt="" className="dropzone-preview" />
+        ) : (
+          <>
+            <span className="dropzone-icon">📷</span>
+            <span className="dropzone-text">Click or drag a logo here</span>
+          </>
+        )}
+        <input type="file" accept="image/*" hidden onChange={(e) => e.target.files[0] && pickPhoto(e.target.files[0])} />
+      </label>
+
+      <div className="form-grid">
+        <div className="form-field">
+          <label className="field-label">Restaurant name</label>
+          <input className="text-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Mama's Kitchen" />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Cuisine type</label>
+          <input className="text-input" value={form.cuisine_type} onChange={(e) => setForm({ ...form, cuisine_type: e.target.value })} placeholder="e.g. Ugandan, Grill, Fast food" />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Location (address text)</label>
+          <input className="text-input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Kampala Road" />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Phone</label>
+          <input className="text-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+2567..." />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Avg. prep time (minutes)</label>
+          <input className="text-input" type="number" value={form.avg_prep_minutes} onChange={(e) => setForm({ ...form, avg_prep_minutes: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label className="field-label">Pickup location (GPS)</label>
+          <button type="button" className="mini-btn" onClick={captureLocation} disabled={locating} style={{ width: "100%", justifyContent: "center" }}>
+            {locating ? "Getting location..." : form.latitude ? `📍 ${form.latitude.toFixed(5)}, ${form.longitude.toFixed(5)}` : "📍 Use my current location"}
+          </button>
+        </div>
+      </div>
+
+      <div className="form-field" style={{ marginTop: 14 }}>
+        <label className="field-label">Description</label>
+        <textarea className="text-input" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      </div>
+
+      <div className="invite-box">
+        <label className="field-label"><Users size={12} /> Invite a manager (optional)</label>
+        <input className="text-input" value={form.manager_email} onChange={(e) => setForm({ ...form, manager_email: e.target.value })} placeholder="their-email@example.com" />
+        <div className="invite-hint">Whoever logs in with this email automatically gets access to manage this restaurant's menu and orders — no separate application needed.</div>
+      </div>
+
+      <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} disabled={!form.name || busy || uploading} onClick={submit}>
+        {busy || uploading ? "Adding..." : "Add restaurant"}
       </button>
     </div>
   );
@@ -1137,6 +1275,7 @@ export default function App() {
   const [productReviews, setProductReviews] = useState({});
   const [seller, setSeller] = useState(null);
   const [myProducts, setMyProducts] = useState([]);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [myOrders, setMyOrders] = useState([]);
   const [pendingSellers, setPendingSellers] = useState([]);
   const [pendingProducts, setPendingProducts] = useState([]);
@@ -1159,6 +1298,7 @@ export default function App() {
   const [foodCart, setFoodCart] = useState([]);
   const [activeRestaurantId, setActiveRestaurantId] = useState(null);
   const [activeFoodOrderId, setActiveFoodOrderId] = useState(null);
+  const [adminManagingRestaurant, setAdminManagingRestaurant] = useState(null);
   const [restaurantApplyBusy, setRestaurantApplyBusy] = useState(false);
   const [addRestaurantBusy, setAddRestaurantBusy] = useState(false);
   const [foodOrderBusy, setFoodOrderBusy] = useState(false);
@@ -1216,7 +1356,13 @@ export default function App() {
 
   useEffect(() => {
     if (!user) { setMyRestaurant(null); return; }
-    api.myRestaurant().then(setMyRestaurant).catch(() => setMyRestaurant(null));
+    api.myRestaurant()
+      .then(setMyRestaurant)
+      .catch(() => {
+        // No restaurant yet — check whether an admin invited this email to
+        // manage one they added directly, and link it automatically.
+        api.claimRestaurant().then(setMyRestaurant).catch(() => setMyRestaurant(null));
+      });
   }, [user, page]);
 
   // Smart app banner: only on small screens, only once per session, and
@@ -1328,16 +1474,42 @@ export default function App() {
     } catch (e) { flash(e.message); } finally { setBusy(false); }
   };
 
-  const addSellerProduct = async (form, files) => {
+  // Shared by add and edit: uploads any newly-picked files, keeps any
+  // existing remote URLs, and returns the final images array in cover-first
+  // order — cover is always whichever photo sits at index 0.
+  const resolvePhotoUrls = async (photos) => {
+    const newItems = photos.filter((p) => p.file);
+    let uploadedUrls = [];
+    if (newItems.length) uploadedUrls = await api.uploadProductImages(newItems.map((p) => p.file));
+    let i = 0;
+    return photos.map((p) => (p.file ? uploadedUrls[i++] : p.url));
+  };
+
+  const addSellerProduct = async (form, photos) => {
     setAddBusy(true);
     try {
-      let images = [];
-      if (files && files.length) images = await api.uploadProductImages(files);
+      const images = await resolvePhotoUrls(photos);
       await api.createProduct({
+        name: form.name, description: form.desc, price: Number(form.price),
+        stock: Number(form.stock) || 0, category_id: undefined, images,
+      });
+      flash("Submitted for admin approval");
+      nav("seller-home");
+    } catch (e) { flash(e.message); } finally { setAddBusy(false); }
+  };
+
+  const editSellerProduct = async (form, photos) => {
+    if (!editingProduct) return;
+    setAddBusy(true);
+    try {
+      const images = await resolvePhotoUrls(photos);
+      await api.updateProduct(editingProduct.id, {
         name: form.name, description: form.desc, price: Number(form.price),
         stock: Number(form.stock) || 0, images,
       });
-      flash("Submitted for admin approval");
+      flash("Changes saved — re-submitted for admin review");
+      setEditingProduct(null);
+      api.sellerMine().then((rows) => setMyProducts(rows.map(toUiProduct))).catch(() => {});
       nav("seller-home");
     } catch (e) { flash(e.message); } finally { setAddBusy(false); }
   };
@@ -1460,11 +1632,12 @@ export default function App() {
   else if (page === "tracking") body = <TrackingPage order={activeOrder} onRate={rateOrder} ratedIds={ratedOrderIds} />;
   else if (page === "orders") body = user ? <OrdersPage user={user} orders={orders} onTrack={(o) => { setActiveOrder(o); nav("tracking"); }} points={user.points || 0} /> : <AuthPage onLogin={api.login} onRegister={doRegister} onGoogle={doGoogle} flash={flash} />;
   else if (page === "sell") body = <SellPage user={user} seller={seller} onApply={applySeller} busy={busy} flash={flash} />;
-  else if (page === "seller-home" || page === "seller-add" || page === "seller-orders") {
-    const tab = page === "seller-add" ? "add" : page === "seller-orders" ? "orders" : "overview";
-    body = <SellerDashboard seller={seller} myProducts={myProducts} myOrders={myOrders} tab={tab} onNav={nav} flash={flash} onAddProduct={addSellerProduct} onUpdateOrderStatus={updateOrderStatus} addBusy={addBusy} />;
+  else if (page === "seller-home" || page === "seller-add" || page === "seller-orders" || page === "seller-edit") {
+    const tab = page === "seller-add" ? "add" : page === "seller-orders" ? "orders" : page === "seller-edit" ? "edit" : "overview";
+    body = <SellerDashboard seller={seller} myProducts={myProducts} myOrders={myOrders} tab={tab} onNav={nav} flash={flash} onAddProduct={addSellerProduct} onUpdateOrderStatus={updateOrderStatus} addBusy={addBusy} onEditProduct={(p) => { setEditingProduct(p); nav("seller-edit"); }} editingProduct={editingProduct} onEditSubmit={editSellerProduct} />;
   }
-  else if (page === "admin-home") body = <AdminConsole pendingSellers={pendingSellers} pendingProducts={pendingProducts} stats={adminStats} onApproveSeller={approveSeller} onApproveProduct={approveProduct} pendingRestaurants={pendingRestaurants} pendingMenuItems={pendingMenuItems} onApproveRestaurant={approveRestaurant} onApproveMenuItem={approveMenuItem} onAddRestaurantDirect={addRestaurantDirect} addRestaurantBusy={addRestaurantBusy} flash={flash} />;
+  else if (page === "admin-home") body = <AdminConsole pendingSellers={pendingSellers} pendingProducts={pendingProducts} stats={adminStats} onApproveSeller={approveSeller} onApproveProduct={approveProduct} pendingRestaurants={pendingRestaurants} pendingMenuItems={pendingMenuItems} onApproveRestaurant={approveRestaurant} onApproveMenuItem={approveMenuItem} onAddRestaurantDirect={addRestaurantDirect} addRestaurantBusy={addRestaurantBusy} flash={flash} allRestaurants={restaurants} onManageMenu={(r) => { setAdminManagingRestaurant(r); nav("admin-manage-menu"); }} />;
+  else if (page === "admin-manage-menu") body = <AdminManageMenuPage restaurantId={adminManagingRestaurant?.id} restaurantName={adminManagingRestaurant?.name} flash={flash} onBack={() => nav("admin-home")} />;
   else if (page === "verify-otp") body = <OtpPage email={pendingVerifyEmail || user?.email} flash={flash} onVerified={async () => { const me = await api.fetchMe(); setUser(me); nav("home"); }} />;
   else if (page === "auth") body = user ? <OrdersPage user={user} orders={orders} onTrack={(o) => { setActiveOrder(o); nav("tracking"); }} points={user.points || 0} /> : <AuthPage onLogin={api.login} onRegister={doRegister} onGoogle={doGoogle} flash={flash} />;
   else if (page === "food-home") body = <FoodHome restaurants={restaurants} onOpen={openRestaurant} />;
@@ -1508,12 +1681,13 @@ function SiteStyles() {
       main { flex: 1; }
       .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 
-      .site-header { position: sticky; top: 0; z-index: 30; background: #FAF6EF; border-bottom: 1px solid #EAE3D2; }
+      .site-header { position: sticky; top: 0; z-index: 30; background: rgba(250,246,239,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid #EAE3D2; box-shadow: 0 1px 0 rgba(28,43,34,0.02); }
       .header-inner { max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 24px; }
       .brand { display: flex; align-items: center; gap: 10px; background: none; border: none; cursor: pointer; font-family:'Space Grotesk',sans-serif; font-weight: 700; font-size: 17px; color: #1C2B22; }
       .brand b { color: #1B5E3A; }
-      .brand-mark { width: 36px; height: 36px; border-radius: 10px; background: #1B5E3A; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-      .header-search { flex: 1; max-width: 480px; display: flex; align-items: center; gap: 8px; background: #F2EFE4; border: 1px solid #E4DCC6; border-radius: 12px; padding: 10px 14px; }
+      .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, #1B5E3A, #134429); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px rgba(27,94,58,0.3); }
+      .header-search { flex: 1; max-width: 480px; display: flex; align-items: center; gap: 8px; background: #F2EFE4; border: 1.5px solid transparent; border-radius: 12px; padding: 10px 14px; transition: border-color .15s ease, background .15s ease; }
+      .header-search:focus-within { border-color: #1B5E3A; background: #fff; }
       .header-search input { border: none; background: none; outline: none; font-size: 13.5px; flex: 1; font-family: inherit; }
       .header-nav { display: flex; gap: 6px; }
       .header-nav button { background: none; border: none; font-size: 13.5px; font-weight: 600; color: #3A362E; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
@@ -1527,19 +1701,45 @@ function SiteStyles() {
       .dropdown button:hover { background: #F2EFE4; }
       .header-mobile-search { display: none; padding: 0 16px 12px; }
 
-      .hero { background: linear-gradient(120deg, #1B5E3A, #134429); color: #fff; padding: 64px 24px; }
-      .hero-inner { max-width: 1200px; margin: 0 auto; }
-      .hero-text { max-width: 560px; }
-      .eyebrow { font-size: 11px; letter-spacing: 0.12em; font-weight: 700; opacity: 0.8; }
-      .hero-text h1 { font-family: 'Space Grotesk',sans-serif; font-weight: 800; font-size: 42px; line-height: 1.15; margin: 10px 0 14px; }
-      .hero-text p { font-size: 14.5px; opacity: 0.9; line-height: 1.6; }
+      .hero {
+        position: relative; overflow: hidden;
+        background: linear-gradient(135deg, #1B5E3A 0%, #164a2e 55%, #0f3620 100%);
+        color: #fff; padding: 76px 24px 0;
+      }
+      .hero-blob { position: absolute; border-radius: 50%; filter: blur(2px); pointer-events: none; }
+      .hero-blob-1 { width: 420px; height: 420px; background: radial-gradient(circle, rgba(226,84,45,0.28), transparent 70%); top: -160px; right: -100px; }
+      .hero-blob-2 { width: 300px; height: 300px; background: radial-gradient(circle, rgba(201,150,42,0.22), transparent 70%); bottom: -140px; left: -60px; }
+      .hero-inner { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+      .hero-text { max-width: 580px; }
+      .eyebrow { font-size: 12px; letter-spacing: 0.1em; font-weight: 700; opacity: 0.95; background: rgba(255,255,255,0.12); display: inline-block; padding: 6px 14px; border-radius: 20px; }
+      .hero-text h1 { font-family: 'Space Grotesk',sans-serif; font-weight: 800; font-size: 48px; line-height: 1.1; margin: 18px 0 16px; letter-spacing: -0.02em; }
+      .hero-text p { font-size: 15.5px; opacity: 0.92; line-height: 1.65; max-width: 480px; }
+      .btn-cta {
+        background: #E2542D; color: #fff; border: none; border-radius: 14px; padding: 15px 26px;
+        font-weight: 700; font-size: 14.5px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+        box-shadow: 0 8px 20px rgba(226,84,45,0.4); transition: transform .15s ease, box-shadow .15s ease;
+      }
+      .btn-cta:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(226,84,45,0.5); }
+      .btn-cta-ghost {
+        background: rgba(255,255,255,0.1); color: #fff; border: 1.5px solid rgba(255,255,255,0.35); border-radius: 14px;
+        padding: 15px 26px; font-weight: 700; font-size: 14.5px; cursor: pointer; backdrop-filter: blur(4px);
+        transition: background .15s ease;
+      }
+      .btn-cta-ghost:hover { background: rgba(255,255,255,0.18); }
+      .trust-bar {
+        position: relative; z-index: 1; max-width: 1200px; margin: 44px auto 0; display: flex; flex-wrap: wrap;
+        gap: 10px; padding: 0 24px 28px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 22px;
+      }
+      .trust-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; opacity: 0.9; flex: 1; min-width: 140px; }
 
-      .cat-strip { display: flex; gap: 18px; overflow-x: auto; padding: 24px 0 10px; }
-      .catchip { display: flex; flex-direction: column; align-items: center; gap: 7px; background: none; border: none; cursor: pointer; flex: 0 0 auto; width: 76px; }
-      .catchip-icon { width: 58px; height: 58px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+      .cat-strip { display: flex; gap: 20px; overflow-x: auto; padding: 28px 0 10px; }
+      .catchip { display: flex; flex-direction: column; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; flex: 0 0 auto; width: 78px; transition: transform .15s ease; }
+      .catchip:hover { transform: translateY(-3px); }
+      .catchip-icon { width: 60px; height: 60px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 27px; transition: box-shadow .15s ease; box-shadow: 0 2px 8px rgba(28,43,34,0.06); }
+      .catchip:hover .catchip-icon { box-shadow: 0 8px 18px rgba(28,43,34,0.12); }
       .catchip span { font-size: 11.5px; text-align: center; color: #3A362E; font-weight: 600; line-height: 1.25; }
 
-      .section-head { display: flex; align-items: center; gap: 7px; font-family: 'Space Grotesk',sans-serif; font-weight: 700; font-size: 15px; padding: 20px 0 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+      .section-head { display: flex; align-items: center; gap: 8px; font-family: 'Space Grotesk',sans-serif; font-weight: 800; font-size: 17px; padding: 26px 0 14px; letter-spacing: -0.01em; color: #1C2B22; }
       .section-head.accent { color: #1B5E3A; }
       .flash-row { display: flex; align-items: center; justify-content: space-between; }
       .flash-clock { display: flex; align-items: center; font-family: 'IBM Plex Mono',monospace; font-weight: 700; font-size: 12px; background: #1C2B22; color: #fff; padding: 5px 10px; border-radius: 8px; }
@@ -1572,24 +1772,60 @@ function SiteStyles() {
       .qty-ctrl button { background: #fff; border: 1px solid #E4DCC6; border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
       .qty-ctrl span { font-weight: 700; font-size: 14px; min-width: 18px; text-align: center; }
 
-      .btn-primary { background: #E2542D; color: #fff; border: none; border-radius: 12px; padding: 13px 22px; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+      .btn-primary { background: #E2542D; color: #fff; border: none; border-radius: 12px; padding: 13px 22px; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; box-shadow: 0 4px 12px rgba(226,84,45,0.28); transition: transform .12s ease, box-shadow .12s ease; }
+      .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(226,84,45,0.36); }
+      .btn-primary:active:not(:disabled) { transform: translateY(0); }
       .btn-primary.small { padding: 9px 16px; font-size: 13px; }
-      .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-      .btn-secondary { background: #fff; border: 1.5px solid #1B5E3A; color: #1B5E3A; border-radius: 12px; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+      .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+      .btn-secondary { background: #fff; border: 1.5px solid #1B5E3A; color: #1B5E3A; border-radius: 12px; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .12s ease; }
+      .btn-secondary:hover { background: #F0F6F1; }
       .linkbtn { background: none; border: none; color: #A69B87; cursor: pointer; }
-      .mini-btn { display: inline-flex; align-items: center; gap: 4px; background: #F2EFE4; border: 1px solid #E4DCC6; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; color: #1C2B22; }
-      .mini-btn.approve { background: #1B5E3A; color: #fff; border: none; }
+      .mini-btn { display: inline-flex; align-items: center; gap: 4px; background: #F2EFE4; border: 1px solid #E4DCC6; border-radius: 9px; padding: 8px 13px; font-size: 12px; font-weight: 700; cursor: pointer; color: #1C2B22; transition: background .12s ease, border-color .12s ease; }
+      .mini-btn:hover { background: #EAE3D2; }
+      .mini-btn.approve { background: #1B5E3A; color: #fff; border: none; box-shadow: 0 2px 8px rgba(27,94,58,0.25); }
+      .mini-btn.approve:hover { background: #164a2e; }
 
       .cart-layout { display: flex; gap: 24px; flex-wrap: wrap; padding-bottom: 40px; }
-      .cart-row { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid #EFE9D9; border-radius: 14px; padding: 12px; }
+      .cart-row { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid #EFE9D9; border-radius: 14px; padding: 12px; box-shadow: 0 1px 3px rgba(28,43,34,0.03); }
       .cart-thumb { width: 50px; height: 50px; border-radius: 12px; background: #F2EFE4; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
-      .summary { background: #fff; border: 1px solid #EFE9D9; border-radius: 16px; padding: 18px; height: fit-content; }
+      .summary { background: #fff; border: 1px solid #EFE9D9; border-radius: 16px; padding: 18px; height: fit-content; box-shadow: 0 2px 10px rgba(28,43,34,0.04); }
       .sumrow { display: flex; justify-content: space-between; font-size: 13.5px; color: #3A362E; padding: 5px 0; }
       .sumrow.total { font-weight: 800; font-size: 15px; border-top: 1px dashed #E4DCC6; margin-top: 6px; padding-top: 10px; color: #1C2B22; }
 
       .checkout-layout { display: flex; gap: 32px; flex-wrap: wrap; padding-bottom: 40px; }
       .addr-input, .text-input { width: 100%; border: 1px solid #E4DCC6; background: #fff; border-radius: 10px; padding: 11px 13px; font-size: 13.5px; font-family: inherit; margin-top: 6px; resize: none; }
       .field-label { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8A8578; margin-top: 16px; }
+
+      .form-card { background: #fff; border: 1px solid #EFE9D9; border-radius: 18px; padding: 22px; margin: 14px 0 20px; box-shadow: 0 2px 12px rgba(28,43,34,0.05); }
+      .form-card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+      .form-card-icon { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, #1B5E3A, #134429); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .form-card-title { font-family: 'Space Grotesk',sans-serif; font-weight: 700; font-size: 15.5px; color: #1C2B22; }
+      .form-card-sub { font-size: 12px; color: #8A8578; margin-top: 2px; }
+      .dropzone {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+        border: 2px dashed #E4DCC6; border-radius: 14px; height: 110px; cursor: pointer; background: #FBF9F3;
+        transition: border-color .15s ease, background .15s ease; overflow: hidden; position: relative;
+      }
+      .dropzone:hover { border-color: #1B5E3A; background: #F5F9F6; }
+      .dropzone-icon { font-size: 24px; }
+      .dropzone-text { font-size: 12px; color: #8A8578; font-weight: 600; }
+      .dropzone-preview { width: 100%; height: 100%; object-fit: cover; }
+      .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 16px; margin-top: 14px; }
+      .form-field .text-input { margin-top: 6px; }
+      .invite-box { background: #F0F6F1; border: 1px solid #D9EADD; border-radius: 12px; padding: 14px 16px; margin-top: 18px; }
+      .invite-box .field-label { margin-top: 0; color: #1B5E3A; }
+      .invite-hint { font-size: 11px; color: #5A7A63; margin-top: 6px; line-height: 1.5; }
+      @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+      .photo-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 6px; }
+      .photo-tile { position: relative; width: 76px; height: 76px; border-radius: 12px; overflow: hidden; border: 2px solid #1B5E3A; }
+      .photo-tile:nth-child(n+2) { border-color: #EFE9D9; }
+      .photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .photo-cover-badge { position: absolute; bottom: 3px; left: 3px; background: #1B5E3A; color: #fff; font-size: 8px; font-weight: 800; padding: 2px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+      .photo-remove { position: absolute; top: -6px; right: -6px; background: #E2542D; color: #fff; border: 2px solid #fff; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+      .photo-setcover { position: absolute; bottom: 3px; right: 3px; background: rgba(255,255,255,0.92); border: none; border-radius: 4px; font-size: 8px; font-weight: 700; padding: 2px 5px; cursor: pointer; color: #1C2B22; }
+      .photo-add { width: 76px; height: 76px; border-radius: 12px; border: 2px dashed #E4DCC6; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #A69B87; transition: border-color .15s ease; }
+      .photo-add:hover { border-color: #1B5E3A; color: #1B5E3A; }
       .label-eyebrow { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8A8578; }
       .paymethod { display: flex; align-items: center; gap: 10px; background: #fff; border: 1.5px solid #EFE9D9; border-radius: 12px; padding: 13px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: #1C2B22; width: 100%; }
       .paymethod.active { border-color: #1B5E3A; background: #F0F6F1; }
@@ -1643,13 +1879,15 @@ function SiteStyles() {
 
       .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1C2B22; color: #fff; padding: 11px 18px; border-radius: 10px; font-size: 13px; z-index: 100; max-width: 90%; text-align: center; }
 
-      .site-footer { background: #1C2B22; color: #fff; margin-top: 50px; }
-      .footer-inner { max-width: 1200px; margin: 0 auto; padding: 40px 24px; display: flex; gap: 50px; flex-wrap: wrap; }
+      .site-footer { background: linear-gradient(180deg, #1C2B22, #16211a); color: #fff; margin-top: 60px; }
+      .footer-inner { max-width: 1200px; margin: 0 auto; padding: 48px 24px 36px; display: flex; gap: 50px; flex-wrap: wrap; }
       .footer-col { min-width: 140px; }
-      .footer-head { font-family: 'Space Grotesk',sans-serif; font-weight: 700; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #C9C2AF; margin-bottom: 12px; }
-      .footer-col button { display: block; background: none; border: none; color: #EDE7D6; font-size: 13px; padding: 5px 0; cursor: pointer; text-align: left; opacity: 0.85; }
-      .footer-col button:hover { opacity: 1; }
-      .footer-bottom { text-align: center; font-size: 11.5px; color: #8A8578; padding: 16px; border-top: 1px solid #33413A; }
+      .footer-head { font-family: 'Space Grotesk',sans-serif; font-weight: 700; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #C9C2AF; margin-bottom: 14px; }
+      .footer-col button { display: block; background: none; border: none; color: #EDE7D6; font-size: 13px; padding: 6px 0; cursor: pointer; text-align: left; opacity: 0.85; transition: opacity .12s ease, transform .12s ease; }
+      .footer-col button:hover { opacity: 1; transform: translateX(2px); }
+      .footer-social { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; transition: background .15s ease; }
+      .footer-social:hover { background: rgba(255,255,255,0.16); }
+      .footer-bottom { text-align: center; font-size: 11.5px; color: #8A8578; padding: 18px; border-top: 1px solid rgba(255,255,255,0.08); }
 
       @media (max-width: 860px) {
         .header-search { display: none; }
