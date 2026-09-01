@@ -27,7 +27,7 @@ export function FoodHome({ restaurants, onOpen }) {
       <div className="grid-products">
         {restaurants.length ? restaurants.map((r) => (
           <button key={r.id} className="pcard" onClick={() => onOpen(r)}>
-            <div className="pcard-img" style={{ background: r.image ? "#fff" : "linear-gradient(135deg, #E2542D22, #E2542D0d)", padding: 0, overflow: "hidden" }}>
+            <div className="pcard-img" style={{ background: r.image ? "#fff" : "linear-gradient(135deg, var(--accent)22, var(--accent)0d)", padding: 0, overflow: "hidden" }}>
               {r.image ? <img src={r.image} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 46 }}>{CUISINE_ICONS.default}</span>}
               {!r.is_open && <span className="discount-badge" style={{ background: "#8A8578" }}>Closed</span>}
             </div>
@@ -71,7 +71,7 @@ export function RestaurantPage({ restaurantId, onBack, foodCart, setFoodCart, fl
     <div className="container" style={{ paddingBottom: 40 }}>
       <button className="linkbtn" style={{ margin: "16px 0" }} onClick={onBack}>← Back</button>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-        <div className="brand-mark" style={{ background: "#E2542D" }}><Store size={20} color="#fff" /></div>
+        <div className="brand-mark" style={{ background: "var(--accent)" }}><Store size={20} color="#fff" /></div>
         <div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22 }}>{restaurant.name}</div>
           <div style={{ fontSize: 12.5, color: "#8A8578" }}>{restaurant.cuisine_type} · {restaurant.location} · ~{restaurant.avg_prep_minutes} min</div>
@@ -264,7 +264,7 @@ export function FoodTrackingPage({ orderId, flash }) {
   return (
     <div className="container" style={{ maxWidth: 560, paddingBottom: 40 }}>
       <div className="section-head">Track your food order</div>
-      <div className="rider-card" style={{ background: "#E2542D" }}>
+      <div className="rider-card" style={{ background: "var(--accent)" }}>
         <Bike size={22} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>{order.restaurant_name}</div>
@@ -273,7 +273,7 @@ export function FoodTrackingPage({ orderId, flash }) {
       </div>
 
       {riderLocation && ["claimed", "picked_up"].includes(order.status) && (
-        <div className="banner-notice" style={{ background: "#E6F2E9", color: "#1B5E3A", display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="banner-notice" style={{ background: "var(--success-bg)", color: "var(--primary)", display: "flex", alignItems: "center", gap: 10 }}>
           <Navigation size={16} />
           <div style={{ fontSize: 12.5 }}>
             Rider live position: {riderLocation.latitude.toFixed(5)}, {riderLocation.longitude.toFixed(5)}
@@ -591,7 +591,7 @@ export function RiderDashboard({ flash }) {
         <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22 }}>Available deliveries</div>
       </div>
       {claimed.length > 0 && (
-        <div className="banner-notice" style={{ background: "#E6F2E9", color: "#1B5E3A" }}>
+        <div className="banner-notice" style={{ background: "var(--success-bg)", color: "var(--primary)" }}>
           Your location is being shared live while you have an active delivery. Keep this tab open and location permission on.
         </div>
       )}
